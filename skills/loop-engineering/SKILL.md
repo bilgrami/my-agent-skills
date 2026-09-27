@@ -5,7 +5,7 @@ description: Plan-first, test-gated build loop for API-first apps on Cloudflare,
 
 # Loop Engineering
 
-A plan-first, test-gated build loop. Nothing gets built until the plan is approved. Each phase is implemented, tested, reviewed and shipped to beta before the next one starts. The rules here come from real incidents on production apps; the stories behind them are in `references/lessons.md`.
+A plan-first, test-gated build loop. Nothing gets built until the plan is approved. Each phase is implemented, tested, reviewed and shipped to beta before the next one starts. The rules here come from real incidents on production apps; the stories behind them are in `references/lessons.md`. For an app that already exists, start with the companion **architecture-upgrade** skill, which audits it and plans the fixes, then uses this loop to build them.
 
 ## Model roles
 

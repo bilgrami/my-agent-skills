@@ -7,14 +7,26 @@ Reusable skills for Claude (the Claude app, Cowork and Claude Code). Each skill 
 | Skill | What it does |
 | --- | --- |
 | [loop-engineering](skills/loop-engineering/SKILL.md) | Plan-first, test-gated build loop for API-first apps: plan, mocks, OpenAPI design and test plans up front, then build each phase, gate it on tests and ship to beta before prod. Defaults to Cloudflare Workers and Pages, Clerk, portable Postgres (Neon or Supabase), R2, Redis, n8n, Stripe and Sentry, and comes with lessons learned from production incidents. |
+| [architecture-upgrade](skills/architecture-upgrade/SKILL.md) | Audits an existing app (read only), writes a plain-language architecture page and an evidence-backed gap report, plans fixes in phases within the current stack (beta before prod, API-first, core logic out of n8n, single-server risk), then fixes them with a test-gated loop. Install together with loop-engineering. |
+
+## Quick start: fix an existing app
+
+1. Install both **loop-engineering** and **architecture-upgrade** (steps below).
+2. Open your app's repo in Claude Code, or connect its folder in Claude Cowork.
+3. Paste:
+
+   > Use the architecture-upgrade skill on this repo. Audit it read only, write docs/architecture.md and the gap report, then give me the phased fix plan and your questions. Do not change anything until I approve the plan.
+
+4. Answer its questions, approve the plan, and it fixes one phase at a time, shipping to beta first and telling you what to try.
 
 ## Installing a skill
 
 ### Claude app or Cowork
 
-1. Download this repo (green **Code** button, then **Download ZIP**) and unzip it.
-2. Zip the single skill folder you want, for example `skills/loop-engineering`, so the zip contains `loop-engineering/SKILL.md`.
-3. In Claude, open Settings, find the Skills section and upload that zip.
+1. Download the ready-made zip for each skill from the [`dist/`](dist) folder (open the file on GitHub, then the download button): `loop-engineering.zip` and `architecture-upgrade.zip`.
+2. In Claude, open Settings, find the Skills section and upload each zip.
+
+Maintainers: after changing a skill, run `./scripts/build-zips.sh` and commit the updated `dist/` zips.
 
 ### Claude Code
 
@@ -22,7 +34,7 @@ Copy the skill folder into your personal skills directory:
 
 ```bash
 git clone https://github.com/bilgrami/my-agent-skills.git
-cp -r my-agent-skills/skills/loop-engineering ~/.claude/skills/
+cp -r my-agent-skills/skills/loop-engineering my-agent-skills/skills/architecture-upgrade ~/.claude/skills/
 ```
 
 Or put it in a project's `.claude/skills/` folder to share it with everyone on that repo.

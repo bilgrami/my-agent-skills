@@ -130,9 +130,38 @@ Use n8n for glue between systems: intake from forms and outside tools, reminders
 - **Keep execution data short-lived** (prune after days, not months) since it holds payloads that may include personal data.
 - **Test:** each workflow has a fixture payload and an expected API call or row; e2e tests on beta trigger the webhook and check the effect through the API.
 
+## Multi-tenant (one app, many customer businesses)
+
+- Each business is a Clerk Organization; the API reads the active org from the session and passes it to the database as a claim.
+- Every tenant table has `tenant_id NOT NULL`, indexed, and RLS policies that compare it to the claim. Named functions check it too.
+- Per-tenant settings (phone numbers, mailboxes, prompts, knowledge) live in tenant-scoped tables, never in env vars.
+- A test signs in as two tenants and proves neither can read, list, count or guess the other's rows, including through search and exports.
+- Tenant-supplied credentials (their own SMTP mailbox, their own Twilio number) are encrypted at rest and never returned by the API.
+
+## AI and voice agents
+
+The pattern from a production voice-agent app (phone number with Telnyx or Twilio, calls run by a voice platform such as Retell, an LLM for thinking, a TTS voice):
+
+- **Tools are API operations.** When the agent checks a diary, books an appointment or looks something up mid-call, it calls your API with a token scoped to that tenant and those operations. Prefer the API over a workflow tool for anything the conversation waits on; latency matters and the rules stay testable.
+- **After the call:** the platform's webhook (transcript, recording, outcome) is signature-verified, stored idempotently by call id, then processed by a job: score the answers, create or update the lead, schedule follow-ups.
+- **Knowledge search:** embed each tenant's documents with the provider's embedding model and store vectors in Postgres (pgvector) with the tenant id; retrieval filters by tenant before similarity.
+- **Prompts, agent configs and voice settings** are versioned in the repo and pushed to the platform by a script, per environment.
+- **Record usage and cost** per call and per tenant (minutes, tokens, TTS characters, SMS) so billing and margins are real.
+- **Recordings and transcripts are personal data:** retention period, access by role, scrubbed from error reports.
+- **Test with recorded fixtures:** replay stored webhook payloads in e2e tests; keep a small set of scripted test calls for beta.
+
+## Alternative host: Docker on one server
+
+Some apps need long-running Node processes, websockets or a framework server (Next.js with a Node runtime). Then a Docker server behind Traefik (TLS certificates, basic protection) is a fine choice. If you pick it:
+
+- It is a single point of failure; keep backups and files off the box (R2), and document a rebuild from scratch.
+- Deploy from CI on merge, then run automatic checks against the live site, same as the Workers flow.
+- Keep the beta-first rule: a beta container and database, promote after it soaks.
+- The API-first and portable-Postgres rules still apply; the browser still never talks to the database.
+
 ## Architecture page
 
-Keep `docs/architecture.md` in plain language: a bullet per concern (website, API, database, sign-in, files, cache, jobs, billing, errors, backups, outside services), each saying what it uses and where it runs, then one short paragraph each on how a request and a background job travel through the system. Verify it against the code and the live environments; update it in the same change that adds or removes a service.
+Keep `docs/architecture.md` in plain language using `templates/architecture.md`: what it is built with (a bullet per concern), how the main user journey flows through it as numbered steps, and where it runs and how changes go live (server or platform, deploy trigger, checks before and after). Verify it against the code and the live environments; update it in the same change that adds or removes a service.
 
 ## Secrets
 

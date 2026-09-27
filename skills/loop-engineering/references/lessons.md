@@ -48,6 +48,10 @@ Each rule is stated as the thing that would have prevented a real incident on a 
 
 **Migration numbers are facts, not plans.** Numbering follows what actually shipped; the doc trail absorbs the difference. Never renumber applied history.
 
+**Catch secrets before they are committed.** A pre-commit secret scan, lint, type and unused-code check on staged files is cheap; a leaked key in history is not.
+
+**Database tests run against a real Postgres copy**, not mocks. Mocks agreed with the code; the database did not.
+
 **Loose SQL files in the repo root are drift.** One repo collected dozens of `fix_*.sql`, `RUN_ME_*.sql` and schema dumps next to its migrations; nobody could say which had run where. Database changes are migrations or audited repair scripts, nothing else.
 
 **Data repairs are data, and reviewable.** The pattern that worked: a read-only script decides what to fix, writes the fix as SQL applied in one transaction, a CSV of every decision with its evidence, a CSV of what it could not decide for a person, and an undo script. A stalled pipeline run was healed the same way, by repairing the rows the pipeline reads, idempotently, keyed to the defect.

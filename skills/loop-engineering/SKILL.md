@@ -30,6 +30,8 @@ The model reviewing code is never the one that wrote it.
 - **Backups:** a nightly database dump to R2 (a different provider from the database host), with a restore that has actually been tested.
 - **Automation:** n8n for integration glue (lead intake, reminders, syncing with outside tools), one instance per environment on its own subdomain. It is another API client: it calls the API with a scoped service token and never touches the database. Business rules stay in the API and database, not in workflows. Workflows are exported into the repo. Details in `references/stack-setup.md`.
 - **Other outside services** (AI, voice, messaging, calendars) are called from the API or jobs Worker, never the browser; their prompts and configs live in the repo.
+- **Multi-tenant apps:** each customer business is a Clerk Organization and a tenant id on every row; RLS keys on it, and a test proves one tenant cannot read another's data.
+- **AI and voice agents:** the agent's tools are API operations with a scoped token, post-call or post-run webhooks are verified and idempotent, prompts live in the repo, and embeddings live in Postgres (pgvector) per tenant. See `references/stack-setup.md`.
 - **Environments:** dev (local), beta, demo, prod, listed in one `deploy/environments.toml`. Each has its own Worker, database, bucket, secrets and Clerk instance. Demo runs on seeded, resettable fake data.
 
 Setup details: `references/stack-setup.md`. Shipping flow: `references/shipping.md`.
@@ -57,7 +59,7 @@ For every new feature, produce:
 5. Data model and migrations, each replay-safe, with a rollback and a closing verification query. Any Redis keys or indexes, and how they are rebuilt from Postgres.
 6. Unit test plan and e2e test plan, mapped to each phase's Definition of Done.
 7. Risks, open questions, and the owner actions the plan will need (accounts, tokens, DNS).
-8. A plain-language **Stack and architecture** page (`docs/architecture.md`): what it is built with, what runs where, and how a request and a background job flow. Checked against the code, not written from memory, and updated whenever a service is added or removed.
+8. A plain-language **Stack and architecture** page (`docs/architecture.md`, from `templates/architecture.md`): what it is built with, how the main user journey flows through it step by step, and where it runs and how changes go live. Checked against the code, not written from memory, and updated whenever a service is added or removed.
 
 Then:
 
@@ -75,7 +77,7 @@ Save the approved plan to `agents/<yyyy-mm-dd>-<task>/plan.md` using `templates/
 
 1. Write the phase's unit and e2e tests first, from the plan. Confirm they fail.
 2. Implement the phase in the contract-first order above.
-3. Run gates with **the repo's own scripts** (`npm run verify` or equivalent), never a hand-typed substitute. Order: typecheck, lint, guard scripts, unit, SQL tests, build, e2e (Playwright with Clerk testing tokens).
+3. A pre-commit hook runs a secret scan, lint, types and an unused-code check (for example knip) on staged files. Then run gates with **the repo's own scripts** (`npm run verify` or equivalent), never a hand-typed substitute. Order: typecheck, lint, guard scripts, unit, SQL tests, build, e2e (Playwright with Clerk testing tokens).
 4. If anything fails: find the root cause, fix, rerun. Max 3 attempts per failure, then stop and report what was tried.
 5. Never skip, weaken or delete a test to make it pass. If a test looks wrong, stop and explain why. Before overriding any check, read its code; the fix is usually on your side.
 6. A reviewer agent checks the diff against the plan and the Definition of Done. Fix gaps, rerun gates.

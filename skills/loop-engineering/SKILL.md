@@ -1,75 +1,110 @@
 ---
 name: loop-engineering
-description: Plan-first build loop for new features on a Cloudflare + Clerk + API-first stack. Use when starting a new feature, app or phase of work that should be planned, approved, then built and tested phase by phase.
+description: Plan-first, test-gated build loop for API-first apps on Cloudflare, Clerk and portable Postgres (Neon, Supabase), with R2 files and staged beta-to-prod shipping. Use when starting a new feature, app or phase of work.
 ---
 
 # Loop Engineering
 
-A plan-first, test-gated build loop. Nothing gets built until the plan is approved. Each phase is implemented, tested and reviewed before the next one starts.
+A plan-first, test-gated build loop. Nothing gets built until the plan is approved. Each phase is implemented, tested, reviewed and shipped to beta before the next one starts. The rules here come from real incidents on production apps; the stories behind them are in `references/lessons.md`.
 
 ## Model roles
 
-Split work so the model reviewing code is never the one that wrote it.
+The model reviewing code is never the one that wrote it.
 
-- Planner and reviewer: Opus 5.5 at high effort for Phase 0 and plan critique, medium for in-loop reviews.
+- Planner and reviewer: Opus 5.5, high effort for Phase 0 and plan critique, medium for in-loop reviews.
 - Builder: Fable 5.1 (swap roles if the other model does better on this codebase).
-- Reviews always run in a separate agent with fresh context, not as self-review in the builder's context.
+- Reviews run in a separate agent with fresh context, never as self-review in the builder's context.
 
-## Stack rules (defaults, override per project if the user says so)
+## Stack (defaults; the user can override per project)
 
-- Hosting: Cloudflare. API on Workers (Hono), sites on Pages. Environments: dev (local), beta, demo, prod. Each has its own wrangler env, secrets, database and Clerk instance. Never share secrets across environments.
-- Demo runs on seeded, resettable fake data. Never real user data.
-- API first. The OpenAPI spec is the source of truth; generate TypeScript types and the client from it. Version everything under /v1. Use one error envelope shape everywhere.
-- No direct Supabase. Frontends never hold a Supabase key. Only the Worker talks to Postgres (via Hyperdrive). All data flows through the API.
-- Auth: Clerk with custom branding and a custom domain. The Worker verifies the Clerk JWT on every request. Sync users via Clerk webhooks and verify their signatures.
-- Validate all input with zod. Set CORS per environment. Rate limit public endpoints.
-- Every service exposes /health. Log errors with request IDs.
+- **Web:** React + Vite + TypeScript on Cloudflare Pages.
+- **API:** a Cloudflare Worker (Hono) at `api.<domain>`, versioned under `/v1`. A second Worker for cron and queues if needed.
+- **Database:** plain, portable Postgres. Neon (free tier) for dev, beta and demo; Neon or Supabase for prod. The Worker reaches it through Hyperdrive. Business rules live in named SQL functions and row level security, so the same migrations run on any Postgres host.
+- **Files:** Cloudflare R2, one bucket per environment, served only through the API with short-lived signed links.
+- **Auth:** Clerk with custom branding and a custom domain. The Worker verifies the Clerk JWT; the database trusts only tokens the API signs.
+- **Admin sites:** behind Cloudflare Access (free Zero Trust), with Clerk as the identity provider.
+- **MCP server:** just another API client. It calls API operations in process and never imports the database layer.
+- **Environments:** dev (local), beta, demo, prod, listed in one `deploy/environments.toml`. Each has its own Worker, database, bucket, secrets and Clerk instance. Demo runs on seeded, resettable fake data.
+
+Setup details: `references/stack-setup.md`. Shipping flow: `references/shipping.md`.
+
+## API first, enforced from day one
+
+Retrofitting API-first later is brutal (one app still had over a thousand direct database calls to unwind a year in). So the guard rails are part of the first phase, not a cleanup:
+
+- The web app has no database client. A lint rule refuses the import and a CI script holds the count of direct calls at zero.
+- The CSP names no database or storage host.
+- Every operation in the OpenAPI spec has a handler; a coverage test fails if one is missing.
+- Rows are mapped to responses in one module and failures to stable error codes in one module. A handler that returns a raw row is a bug.
+- There are no private endpoints for your own screens. If a screen needs it, the API offers it to every client with that role.
+
+The order of work for any feature: **contract** (OpenAPI, additive changes only, a changelog line) → **database** (migration, SQL functions, RLS, SQL tests) → **gateway** (handler and tests) → **generate** (types, client, docs; commit what changes) → **screen** (typed client only) → **deploy the API before the web app that needs it**.
 
 ## Phase 0: Plan (no code until the user approves)
 
 For every new feature, produce:
 
-1. Feature breakdown: features, then phases. Each phase must be shippable and testable on its own, with a written Definition of Done.
+1. Feature breakdown: features, then phases. Each phase is shippable and testable on its own, with a written Definition of Done.
 2. Mocks: UI mockups for each screen, plus MSW API mocks so frontend work can start before the API exists.
-3. API design: resources, endpoints, request and response schemas, errors, auth rules, pagination. Written as OpenAPI.
+3. API design as OpenAPI: resources, endpoints, schemas, error codes, auth rules, pagination, limits.
 4. API docs generated from the spec.
-5. Data model and migrations, with a rollback for each.
+5. Data model and migrations, each replay-safe, with a rollback.
 6. Unit test plan and e2e test plan, mapped to each phase's Definition of Done.
-7. Risks and open questions.
+7. Risks, open questions, and the owner actions the plan will need (accounts, tokens, DNS).
 
 Then:
 
-- Self-critique the plan: missing edge cases, auth gaps, error states, empty states, environment differences, anything untestable. Fix the gaps.
-- Have a separate reviewer agent critique it again with fresh context. Fix what it finds.
-- Ask the user clarifying questions (use AskUserQuestion when available).
-- Wait for explicit approval before writing any code.
+- **Check the live system, not just the repo.** If the plan depends on data, a secret, a flag or a deployed version, confirm it with a query or a request. Repo reading generates hypotheses; the live system settles them.
+- Self-critique the plan: edge cases, auth gaps, error and empty states, environment differences, anything untestable. Fix the gaps.
+- A separate reviewer agent critiques it again with fresh context. Fix what it finds.
+- Ask the user clarifying questions (AskUserQuestion when available).
+- Wait for explicit approval.
+
+Save the approved plan to `agents/<yyyy-mm-dd>-<task>/plan.md` using `templates/plan.md`.
 
 ## Build loop (per phase)
 
 1. Write the phase's unit and e2e tests first, from the plan. Confirm they fail.
-2. Implement the phase.
-3. Run gates in order: typecheck, lint, unit, build, e2e (Playwright, using Clerk testing tokens, against a local or preview deploy).
-4. If anything fails: find the root cause, fix, rerun. Max 3 attempts per failure. After that, stop and report what was tried.
-5. Never skip, weaken or delete a test to make it pass. If a test looks wrong, stop and explain why.
-6. When all gates are green, a reviewer agent checks the diff against the plan and the Definition of Done. Fix any gaps it finds and rerun the gates.
-7. Update PROGRESS.md: phase status, decisions, deviations from plan, known issues. Commit with explicit file paths (never `git add -A` or other blanket staging).
-8. Deploy to beta automatically and run a smoke test against it.
-9. Move to the next phase and repeat.
+2. Implement the phase in the contract-first order above.
+3. Run gates with **the repo's own scripts** (`npm run verify` or equivalent), never a hand-typed substitute. Order: typecheck, lint, guard scripts, unit, SQL tests, build, e2e (Playwright with Clerk testing tokens).
+4. If anything fails: find the root cause, fix, rerun. Max 3 attempts per failure, then stop and report what was tried.
+5. Never skip, weaken or delete a test to make it pass. If a test looks wrong, stop and explain why. Before overriding any check, read its code; the fix is usually on your side.
+6. A reviewer agent checks the diff against the plan and the Definition of Done. Fix gaps, rerun gates.
+7. Update `progress.md` (newest entry first) and commit with explicit file paths. Never `git add -A` or other blanket staging.
+8. Ship to beta (`references/shipping.md`): migrate, deploy API then web, smoke test. **Verify the effect** with a query or request; a clean exit code is a claim, not proof.
+9. Give the user a plain-language list of what to try on beta and what they should see. No jargon, no test names.
+10. Next phase.
 
-PROGRESS.md is the resume point. At the start of any session, read it first and continue from the last incomplete phase.
+`progress.md` is the resume point. At the start of any session, read the newest `agents/` folder first.
+
+## Hard rules (each one cost an incident; see references/lessons.md)
+
+- **Migrations:** replay-safe (`ON CONFLICT DO NOTHING`, `NOT EXISTS` guards, `CREATE OR REPLACE`). Pick the version number at commit time and recheck at push time. Unique version per file. Build test fixtures from the real `CREATE TABLE`, never from a spec's prose. Every write policy has an explicit `WITH CHECK`. For anything a migration writes, `information_schema` beats generated types.
+- **"Fixed" means deployed.** Every fix names which side of the deploy boundary it is on.
+- **A gate is real only if you have seen it fail.** Break it on purpose once. A test file that cannot import is a failure, not a pass.
+- **Contracts between producer and consumer:** before writing code that produces a URL parameter, event or payload, open the code that consumes it. One shared constant or builder, never two hand-typed copies.
+- **Background jobs:** healthy means produced output, not exit 0. Partial success is failure. Jobs are idempotent and sized to fit the time limit. A failed predecessor blocks its dependents. System work is never billed to a user.
+- **Paid model calls** run only through the queue, never from a shell. Budget max tokens for thinking plus answer; an empty answer throws and the raw attempt is logged.
+- **Fail closed, loudly, and only as wide as needed.** A swallowed error in a security path is an outage nobody can see.
+- **UX:** a disabled control says why. Show the server's reason, not a generic error. A screen that queues work shows that work's progress. Never gate a capability on something the user can do without; skip the dependency and say so.
+- **Removing a surface:** list everything that only lives there and rehome it first.
+- **Secrets:** never printed, never in `VITE_` variables or the repo. Read `.env` only inside scripts.
+- **Repo hygiene:** scratch scripts and temp files go in a git-ignored `scratch/` folder, never the repo root.
 
 ## Stop and ask the user before
 
 - Any change to the approved plan or API contract
 - Schema migrations that touch existing data
-- Anything destructive (drops, deletes, force pushes)
-- Deploying to demo or prod
-- Adding a new dependency or third-party service
+- Anything destructive (drops, deletes, force pushes, bucket or database deletes)
+- Promoting to demo or prod
+- Rerunning a failed paid job (it spends money)
+- Adding a dependency, third-party service or paid plan
+- Any action that needs an account, card, password or security setting (those are owner actions)
 
 ## Done means
 
-All phases green, docs match the code, PROGRESS.md is current, and a short report covers what shipped, what deviated from the plan, and what is left.
+All phases green on beta, docs match the code, `progress.md` is current, and a short report covers what shipped, what deviated from the plan, what is waiting on the owner, and what to try.
 
 ## Style
 
-No em dashes in any output. Write plans and reports in plain prose, not robotic checklists, where it reads better.
+No em dashes in any output. Plans, progress notes and reports in plain prose where it reads better than a checklist.

@@ -1,12 +1,12 @@
 # my-agent-skills
 
-Reusable skills for Claude (the Claude app, Cowork and Claude Code). Each skill lives in its own folder under `skills/` with a `SKILL.md` inside.
+Reusable skills for Claude (the Claude app, Cowork and Claude Code). Each skill lives in its own folder under `skills/` with a `SKILL.md` inside, plus optional `references/` and `templates/` the skill points to. Install the whole folder, not just SKILL.md.
 
 ## Skills
 
 | Skill | What it does |
 | --- | --- |
-| [loop-engineering](skills/loop-engineering/SKILL.md) | Plan-first build loop: plan, mocks, API design, test plans and self-critique up front, then implement each phase and gate it on unit and e2e tests before moving on. Defaults to a Cloudflare + Clerk + API-first stack. |
+| [loop-engineering](skills/loop-engineering/SKILL.md) | Plan-first, test-gated build loop for API-first apps: plan, mocks, OpenAPI design and test plans up front, then build each phase, gate it on tests and ship to beta before prod. Defaults to Cloudflare Workers and Pages, Clerk, portable Postgres (Neon or Supabase) and R2, and comes with lessons learned from production incidents. |
 
 ## Installing a skill
 

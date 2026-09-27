@@ -100,6 +100,18 @@ Each rule is stated as the thing that would have prevented a real incident on a 
 
 **Node's global fetch dies under sustained upload load.** It multiplexes over one HTTP/2 session; when that dies every request fails instantly, retries included. Bulk uploads use `node:https`.
 
+## Fly.io and long-running workers
+
+**Undersized machines fail as "script errors".** Jobs on a 256 MB machine were OOM-killed and logged as `exit 1` for weeks. Measure memory under a real job, and log the signal.
+
+**`fly machine run --entrypoint` appends the image's CMD.** A one-off script received the worker's own arguments. Parse args defensively and pass `--restart no` for one-shot machines, or a failure restart-loops.
+
+**The image is your working tree, the schedule runs the bundle.** An uncommitted script change still shipped in an image, while an hourly machine ran a committed bundle that nobody rebuilt, so a source fix silently did nothing. Deploy from a clean checkout and rebuild bundles in the same commit.
+
+**Fly deploys are owner actions.** Agents print the exact `fly deploy` and `fly secrets set` commands; the owner runs them. A deploy from a half-finished tree is a production incident.
+
+**Node's global fetch dies under sustained upload load on long-running workers** (see Background jobs). Use `node:https` for bulk uploads.
+
 ## Security
 
 **Fail closed, loudly, and scoped.** A secure cache failed closed correctly but swallowed key errors in a bare `catch` and applied the strictest level to every item. Result: a platform-wide caching outage with no signal. Warn loudly once, and protect only what needs protecting.

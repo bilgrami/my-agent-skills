@@ -57,6 +57,19 @@ Goal: if the server dies, you know within minutes and can be back within a known
 
 Prove it: a restore drill passes, the rebuild was timed, and a simulated outage (stop the container on beta) triggers an alert.
 
+## P4b. Workers on Fly.io
+
+Goal: long-running workers are right-sized, observable, per-environment and deployed from what is committed.
+
+1. Inventory each Fly app: role, config file, machine size, schedule, secrets it needs (names only), and which database it points at.
+2. Split beta from production: beta apps with their own names, secrets and database; beta workers capped on paid calls.
+3. Right-size from measurement: run a representative job, record peak memory, set size with headroom. Log exit signals.
+4. Add a heartbeat and a stale-heartbeat alert; alert on queue depth and dead-lettered jobs.
+5. Deploys from CI or a script that refuses a dirty tree; scheduled bundles rebuilt and committed with their source.
+6. **owner:** run `fly deploy` and `fly secrets set` from the printed commands.
+
+Prove it: a forced OOM on beta is logged with its signal and alerts; the stale-heartbeat alert fires when a beta worker is stopped; `fly releases` matches the deployed commit.
+
 ## P5. Quick safe wins (can ride with Phase 1)
 
 - Pre-commit: secret scan (for example gitleaks), lint, types, unused-code check (for example knip) on staged files.

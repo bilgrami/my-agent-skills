@@ -20,6 +20,7 @@ The model reviewing code is never the one that wrote it.
 - **Web:** React + Vite + TypeScript on Cloudflare Pages.
 - **API:** a Cloudflare Worker (Hono) at `api.<domain>`, versioned under `/v1`. A second Worker for cron and queues if needed.
 - **Database:** plain, portable Postgres. Neon (free tier) for dev, beta and demo; Neon or Supabase for prod. The Worker reaches it through Hyperdrive. Business rules live in named SQL functions and row level security, so the same migrations run on any Postgres host.
+- **Long-running work:** Fly.io for anything Workers cannot do well: queue workers, OCR or media processing, headless browsers, scheduled machines, or a Node API that needs a full runtime. One Fly app per role and per environment, sized with measured memory. Workers stay the front door; Fly does the heavy lifting behind the queue.
 - **Cache, search and fast counters:** Cloudflare's own primitives first (rate limiting binding, KV, Queues, Durable Objects). Add Redis over HTTP (for example Upstash) only when you need its data structures or RediSearch. Redis is always a derived copy of Postgres, reached through one gateway module, never the source of truth.
 - **Files:** Cloudflare R2, one bucket per environment, served only through the API with short-lived signed links.
 - **Auth:** Clerk with custom branding and a custom domain. The Worker verifies the Clerk JWT; the database trusts only tokens the API signs.

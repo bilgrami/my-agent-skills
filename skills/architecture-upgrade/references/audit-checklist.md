@@ -53,6 +53,7 @@ Work through each area. For every check, record pass, finding (with evidence) or
 - **Backups:** what, how often, where (a different provider from the host), encrypted, and when was a restore last tested into a scratch database with row counts checked?
 - **Proxy and TLS:** certificate renewal automatic, rate limits and basic protection on, admin panels not public.
 - **Resource limits:** container memory limits, disk space alerts, log rotation.
+- **Fly.io (if used):** list every app and its `fly.*.toml`. Check machine memory against real job peaks, `--restart no` on one-shot machines, scheduled machines running committed bundles, a health check or heartbeat per worker, beta apps using beta secrets (not production's), region near the database, and whether deploys come from a clean committed checkout. Compare the deployed image version with main (`fly releases`, read only).
 
 ## 6. Security and personal data
 

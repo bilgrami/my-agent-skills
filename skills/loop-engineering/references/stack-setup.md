@@ -46,6 +46,22 @@ Each environment gets its own Pages project, API Worker, database, R2 bucket, se
 - **CI:** run the SQL test suites and API tests against a real Postgres of the same major version on every push.
 - **Parity:** a fingerprint query (tables, columns, functions, policies, triggers, indexes, constraints, grants, enums) lets you prove two environments have identical schemas. Keep an ignore list for objects a host template created that are not yours.
 
+## Long-running work: Fly.io
+
+Workers are short-lived and memory-light. When a job needs minutes, a big binary (OCR, ffmpeg, a headless browser), lots of memory or a full Node or Python runtime, run it on Fly.io.
+
+- **Shape:** the API (Workers, or a Fly app) puts work on a queue (a Postgres jobs table or Cloudflare Queues). Fly workers claim jobs, heartbeat while running, and write results through the same database functions or API the rest of the app uses. Fly workers never become a second API.
+- **One app per role and per environment:** `app-worker-beta`, `app-worker`, `app-ocr`, each with its own `fly.<role>.toml` in the repo. Beta workers use beta's database and keys, never production's.
+- **Scheduled jobs:** Fly scheduled machines (`--schedule hourly|daily`) that start, run once and stop, so you pay for minutes, not uptime. Pass `--restart no` for one-shot machines or a failing script restart-loops.
+- **Size from measurement:** start at 512 MB to 1 GB for Node work, watch memory under a real job, and right-size. A 256 MB machine OOM-killed jobs for weeks while logs said "exit 1".
+- **Report the signal:** a child killed by the kernel exits with `code === null` and a `signal`; log the signal, or every OOM looks like a script bug.
+- **Size jobs to a time limit:** set a maximum run time per job and chunk work to fit it (by page range, batch or id range), idempotent per chunk so a retry resumes.
+- **Health:** each worker exposes a health check or heartbeats to the database; alert when the newest heartbeat is stale or the queue backs up.
+- **Deploys:** `fly deploy -c fly.<role>.toml` from CI or by the owner, never from an agent's shell without approval. The image is built from the working tree, so deploy from a clean, committed checkout; anything a scheduled machine runs as a bundle must be rebuilt and committed with the source change.
+- **Entrypoint quirk:** `fly machine run --entrypoint "node scripts/x.mjs"` appends the Dockerfile `CMD` to your args; parse arguments defensively.
+- **Secrets:** `fly secrets set` per app and per environment, never baked into the image. Keep a list in the repo of which secret names each app needs (not the values), so a new environment is a checklist, not archaeology.
+- **Region:** put workers near the database; cross-region round trips dominate queue work.
+
 ## Cache, search and counters: Cloudflare first, Redis when it earns its place
 
 Start with what the platform gives you, per environment:

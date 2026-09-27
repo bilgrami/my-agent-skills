@@ -46,6 +46,26 @@ Each environment gets its own Pages project, API Worker, database, R2 bucket, se
 - **CI:** run the SQL test suites and API tests against a real Postgres of the same major version on every push.
 - **Parity:** a fingerprint query (tables, columns, functions, policies, triggers, indexes, constraints, grants, enums) lets you prove two environments have identical schemas. Keep an ignore list for objects a host template created that are not yours.
 
+## Cache, search and counters: Cloudflare first, Redis when it earns its place
+
+Start with what the platform gives you, per environment:
+
+- **Rate limiting:** the Workers rate limiting binding (`type = "ratelimit"` in wrangler), one per class of endpoint.
+- **KV:** config, feature flags and read-heavy caches that can be a few seconds stale.
+- **Queues:** background jobs and retries, consumed by the jobs Worker.
+- **Durable Objects:** anything that needs a single strongly consistent counter, lock or room.
+
+Add Redis when you need sorted sets, streams, shared caches across services, or RediSearch. Rules:
+
+- **Postgres is the truth; Redis is a derived copy.** A hydration job rebuilds it from Postgres (incremental on a schedule, `--full` on demand) and has a `--verify` mode that compares counts. Losing Redis must cost speed, not data.
+- **Reach it over HTTP from Workers** (for example Upstash's REST API). Workers and most serverless platforms cannot hold a raw Redis TCP connection reliably, and some managed Redis hosts are not even resolvable from where your code runs.
+- **One gateway module** owns the credentials and every command: the API, jobs and scripts all go through it. Debug scripts reuse it too, never `new Redis({host, port})`.
+- **No per-isolate cached connections** if you do use TCP somewhere: warm isolates each hold one and exhaust the provider's max clients. Open per request or use HTTP.
+- **Batch bulk work.** Every call is an HTTP hop, so hydration pipelines commands.
+- **Key names** carry environment and version (`beta:v2:book:<id>`) so a schema change is a new prefix, not a flush.
+- **RediSearch:** `FT.CREATE` is a no-op on an existing index, so a new field needs `FT.ALTER ... SCHEMA ADD` and a full rehydrate. UUIDs in TAG filters need their dashes escaped (`@ids:{a\-b\-c}`) or the query silently matches nothing. Put escaping in one shared helper.
+- **A mock client must announce itself.** If dev falls back to an in-memory mock, it logs loudly and refuses to run in beta or prod, and docs never quote performance numbers the live system has not measured.
+
 ## Files: R2 through the API
 
 - One R2 bucket per environment. The browser never gets a storage URL or key.
@@ -86,10 +106,36 @@ Each environment gets its own Pages project, API Worker, database, R2 bucket, se
 - Generated files are fresh: regenerate in CI and fail on a diff.
 - Error codes: every code the API returns is documented in the contract.
 - FK embeds: every embed in a query has a matching foreign key in the migrations.
-- Duplicate migration versions: none.
+- Duplicate migration versions: none, and no version prefix that is the start of another.
 - No secrets in `VITE_` variables.
+
+## Billing, errors, backups and outside services
+
+- **Stripe:** checkout and portal from the API; webhooks verified by signature and processed idempotently (store the event id). Credits, plans and balances change only in the webhook path, never from the client.
+- **Sentry:** one project per app, environment tagged, release set to the app version. Scrub personal data (emails, phone numbers, message bodies) in `beforeSend` and turn off default PII.
+- **Backups:** a scheduled job dumps each prod database nightly to an R2 bucket with lifecycle rules, on a different provider from the database. Restore into a scratch database on a schedule and check row counts; an untested backup is a hope.
+- **Workflow and AI services** (n8n, voice agents, messaging, model providers): called from the API or jobs Worker, never from the browser. Export workflows, prompts and agent configs into the repo; record each paid call's usage and cost.
+
+## n8n (automation)
+
+Use n8n for glue between systems: intake from forms and outside tools, reminders and follow-ups, syncing with calendars or CRMs, fan-out to email and messaging. Keep core business rules out of it; a rule that lives only in a workflow is invisible to tests, the API and every other client.
+
+- **Hosting:** n8n Cloud or self-hosted on its own small server or container (it is a long-running Node service, so not on Workers). One instance per environment (`n8n-beta.example.com`, `n8n.example.com`), or at minimum separate credentials and workflows per environment. Put the editor behind Cloudflare Access; expose only webhook paths publicly.
+- **n8n is an API client.** It calls your API with a service token scoped to the operations it needs, per environment. No database credentials in n8n, ever. Anything a workflow needs that the API lacks is added to the API first.
+- **Inbound webhooks:** when n8n calls your API, sign the request (HMAC header with a shared secret) and include an idempotency key; the API rejects unsigned calls and ignores repeats. When outside services call n8n webhooks, verify their signatures in the first node.
+- **Workflows are code.** Export them into the repo (`n8n/workflows/*.json`, via the n8n CLI `export:workflow` or the API) after every change and commit with explicit paths. Credentials are never in the export; they live in n8n's credential store and are named the same in every environment so an import works unchanged.
+- **Promote like code:** build and try a workflow on beta, export, commit, import to prod. Do not hand-edit prod workflows.
+- **Errors:** every workflow has an error workflow that reports to Sentry (or the API's error endpoint) with the execution id, never with personal data. Set retries with backoff on HTTP nodes, and make the steps safe to rerun.
+- **Paid steps** (model calls, SMS, voice) go through the API or jobs Worker so usage and cost are recorded in one place, not inside n8n nodes.
+- **Keep execution data short-lived** (prune after days, not months) since it holds payloads that may include personal data.
+- **Test:** each workflow has a fixture payload and an expected API call or row; e2e tests on beta trigger the webhook and check the effect through the API.
+
+## Architecture page
+
+Keep `docs/architecture.md` in plain language: a bullet per concern (website, API, database, sign-in, files, cache, jobs, billing, errors, backups, outside services), each saying what it uses and where it runs, then one short paragraph each on how a request and a background job travel through the system. Verify it against the code and the live environments; update it in the same change that adds or removes a service.
 
 ## Secrets
 
 - Live in `.env` (git-ignored) locally and in Wrangler secrets per environment. Scripts read them; agents never print them.
+- Redis credentials live only with the gateway module's Worker (and the hydration job).
 - Deploy tokens are scoped to one account and the permissions the scripts need (Workers, Pages, R2, Hyperdrive, DNS).

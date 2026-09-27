@@ -40,7 +40,31 @@ Each rule is stated as the thing that would have prevented a real incident on a 
 
 **Views and RPCs the app reads must beat the statement timeout.** Correlated subqueries over 300k rows took 7 seconds and died; aggregate once and join took 0.15. An RPC that does a whole book in one statement is a sizing bug: chunk it by real ids or page numbers, never by `count(*)`.
 
+**No version prefix may be the start of another** (`20251207_` beside `20251207000002_`). `_` sorts after digits, so the tool walks them in the wrong order and reports a version as missing. One repo renamed 61 files to undo letter suffixes and shared prefixes.
+
+**Never accept `migration repair --status reverted` as a fix for a history mismatch.** The CLI suggests it; it unmarks history and the next push reruns every file against production. When migrations reach prod by more than one route, history will disagree; replay-safe files make that harmless.
+
+**End every migration with one verification query** that UNIONs its checks into a single result, so applying it prints proof that it worked.
+
 **Migration numbers are facts, not plans.** Numbering follows what actually shipped; the doc trail absorbs the difference. Never renumber applied history.
+
+**Loose SQL files in the repo root are drift.** One repo collected dozens of `fix_*.sql`, `RUN_ME_*.sql` and schema dumps next to its migrations; nobody could say which had run where. Database changes are migrations or audited repair scripts, nothing else.
+
+**Data repairs are data, and reviewable.** The pattern that worked: a read-only script decides what to fix, writes the fix as SQL applied in one transaction, a CSV of every decision with its evidence, a CSV of what it could not decide for a person, and an undo script. A stalled pipeline run was healed the same way, by repairing the rows the pipeline reads, idempotently, keyed to the defect.
+
+## Redis
+
+**Redis may not be reachable the way its connection string suggests.** A managed Redis host was not DNS-resolvable from the job runners or dev machines; the credentials in `.env` looked usable and were not, and every "quick" debug script with a direct client failed with `ENOTFOUND` or a dead socket. Every command went through one HTTP gateway from then on.
+
+**A connection cached per isolate leaks.** Serverless keeps many isolates warm, each holding an idle connection, until the provider's max clients runs out. Open per request, or use an HTTP API.
+
+**`FT.CREATE` is a no-op on an existing index.** A new field written to the hashes was invisible to queries, silently. Reconcile with `FT.INFO` and `FT.ALTER`, then rehydrate in full.
+
+**Escape dashes in TAG filters.** A UUID in `@ids:{...}` without backslash-escaped dashes returns nothing and no error.
+
+**Ship the code the scheduled job actually runs.** An hourly hydration job ran a committed bundle; changing the source without rebuilding and committing the bundle silently changed nothing.
+
+**A silent mock is a lie.** The app's Redis service defaulted to an in-memory mock while the docs quoted sub-10ms search and "90% fewer queries" as if measured. A fallback logs loudly, is refused outside dev, and docs label targets as targets.
 
 ## API and contracts
 
@@ -88,6 +112,16 @@ Each rule is stated as the thing that would have prevented a real incident on a 
 
 **A UI that cannot see the queue teaches people the queue is broken.** Any screen that enqueues work shows its lifecycle and renders a dead job's reason in plain words.
 
+**Never state a figure the data does not hold.** Generated reports and letters leave a marked gap for a person rather than a plausible number, above all for counts of people.
+
+**Anything in `public/` is public.** Help images and screenshots are drawn with invented data; a real name or amount there is one URL from anyone.
+
+**Help moves with the screen.** A change to a screen updates its help page in the same batch; tests fail if help points at a screen, image or related page that no longer exists.
+
+**Designs are approved before they are built.** Review mockups in the app with named approvers; changing the design bumps its version and resets approval.
+
+**Bump the version on every shipped change.** The footer reads it; if it does not move, nobody can tell which build they are looking at.
+
 **Remembered state that changes what a spend button does is named next to the button**, with a one-click way out.
 
 **Retiring a surface means rehoming its furniture.** Blocking phones from one screen silently removed the only report button on mobile. Inventory every affordance that lives only there first.
@@ -105,5 +139,7 @@ Each rule is stated as the thing that would have prevented a real incident on a 
 **Keep the repo root clean.** One repo accumulated hundreds of timestamped config copies and scratch scripts in its root. Scratch goes in a git-ignored folder.
 
 **Know the sandbox's limits.** In the cloud sandbox each shell call is its own process namespace: background processes die when the call returns, and one call lasts about three minutes. A full typecheck or test run on a big repo may not fit; run in chunks and say that is what you did. Start a dev server and its test in the same call.
+
+**A beta that shares the prod database only tests screens.** One app's beta and live sites shared a database, so beta could not safely try data changes. Give beta its own database from the start.
 
 **Owner actions are named, not taken.** Deploys to prod, secret changes, paid reruns, account and billing changes: print the exact command and let the owner run it.

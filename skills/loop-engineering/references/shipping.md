@@ -25,6 +25,10 @@ One front door (for example `./scripts/ship.sh`) reading `deploy/environments.to
 
 Then the owner types the environment name to confirm, and the script: migrates prod for real, deploys the prod API, fast-forwards `main` to the beta commit, deploys the prod web app, and smoke tests prod.
 
+## n8n workflows
+
+Workflow changes ship like code: built on beta's n8n, exported to `n8n/workflows/`, committed, then imported to prod as part of a promote (a script can do the import through n8n's API). Record which workflow versions are live in the deploys table.
+
 ## Demo
 
 Demo follows beta's code with its own database seeded with fake schools, users and data. A reseed script resets it. Prospects get time-limited invites. Real user data never enters demo.

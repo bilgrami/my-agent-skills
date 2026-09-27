@@ -15,6 +15,8 @@ Takes an app that already exists, finds what will hurt it, and fixes it in safe 
 - **Check the live system, not just the repo,** for anything that depends on out-of-band state (env vars, secrets present, applied migrations, deployed version, n8n workflows actually active). Read-only.
 - **Plain language** in everything the owner reads. No em dashes.
 - **Never print secrets.** Note that a secret exists and where, never its value.
+- **Plan mode** (the owner says "plan only" or "change nothing"): write the architecture page, gap report and plan outside the repo (the session's outputs, or a folder the owner names) and show them. Nothing is written into the project until the plan is approved; then they move to `docs/architecture.md` and `agents/<date>-architecture-audit/`.
+- **Leave git exactly as you found it.** Use `git --no-optional-locks` for status, diff and log, never fetch or switch branches during the audit, and check afterwards that no `.lock` file was left in `.git/`. Uncommitted work belongs to someone; report it, never touch it.
 
 ## Step 1: Discover (read only)
 
@@ -28,7 +30,7 @@ Build a picture of the app from the code and config:
 - Outside services: messaging, voice, AI, email, calendar, billing, error tracking, backups. Where their webhooks land.
 - Tests: what exists, how many, what they run against.
 
-Write `docs/architecture.md` from `templates/architecture.md`: what it is built with, how the main user journey flows step by step, where it runs and how changes go live. Say it was checked against the code and when.
+Write the architecture page from `templates/architecture.md` (to `docs/architecture.md`, or outside the repo in plan mode): what it is built with, how the main user journey flows step by step, where it runs and how changes go live. Say it was checked against the code and when.
 
 ## Step 2: Audit
 
@@ -49,7 +51,7 @@ Go through `references/audit-checklist.md` area by area. For each check record: 
 4. **Single-server risk.** One box runs everything with no monitoring, rebuild runbook, off-box files or tested restore.
 5. Everything else, by severity.
 
-Write the gap report from `templates/gap-report.md` into `agents/<yyyy-mm-dd>-architecture-audit/gap-report.md`.
+Write the gap report from `templates/gap-report.md` into `agents/<yyyy-mm-dd>-architecture-audit/gap-report.md` (outside the repo in plan mode).
 
 ## Step 3: Plan
 

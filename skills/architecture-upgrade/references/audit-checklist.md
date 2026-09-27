@@ -9,6 +9,11 @@ Work through each area. For every check, record pass, finding (with evidence) or
 - **How are migrations applied, and to which database?** Same step as the deploy, before it, by hand? Are they replay-safe (`IF NOT EXISTS`, `ON CONFLICT DO NOTHING`, `CREATE OR REPLACE`)? Any duplicate version prefixes (`ls <migrations> | sed -E 's/_.*//' | sort | uniq -d`)?
 - **Rollback:** can the previous version be redeployed in minutes? Are schema changes additive so rolling code back is safe?
 - **Version visible?** Can a person tell which build is live?
+- **Does CI run on the branch you actually ship from?** If deploys go from a `beta` or `staging` branch, CI must trigger on pushes to it, and promote should require a green run for that exact commit.
+- **Is the CI config itself valid?** Duplicate job names, jobs that never run, steps marked report-only. Check the Actions history, not just the file.
+- **Uncommitted or stranded work:** modified files on a deploying branch, migrations or code parked in staging folders outside the normal paths, tracked tarballs or bundles, locked worktrees from old sessions.
+- **What shares production?** List every piece beta or staging shares with prod (database, workers, functions, queues, keys). A beta that shares the database cannot test migrations.
+- **Scheduled-job and platform limits:** cron schedules per account, queue and worker limits, so new environments do not silently lose their jobs.
 
 ## 2. API-first
 
@@ -52,7 +57,8 @@ Work through each area. For every check, record pass, finding (with evidence) or
 ## 6. Security and personal data
 
 - Secret scanning in pre-commit and CI; any secrets in git history.
-- Secrets in env or a secret store, never in code or client bundles.
+- Secrets in env or a secret store, never in code or client bundles, and never in files named like templates (`*.example`) that get copied and shared.
+- Old database dumps or exports lying on laptops or in the repo folder: they are personal data outside any access control.
 - Webhooks from every provider (payments, telephony, voice, auth) verified by signature.
 - Payments: credits or plans granted only after the provider's webhook, never from the client.
 - Error tracking scrubs personal data.

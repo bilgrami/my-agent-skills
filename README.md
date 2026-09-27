@@ -9,6 +9,8 @@ Reusable skills for Claude (the Claude app, Cowork and Claude Code). Each skill 
 | [loop-engineering](skills/loop-engineering/SKILL.md) | Plan-first, test-gated build loop for API-first apps: plan, mocks, OpenAPI design and test plans up front, then build each phase, gate it on tests and ship to beta before prod. Defaults to Cloudflare Workers and Pages, Clerk, portable Postgres (Neon or Supabase), R2, Redis, n8n, Stripe and Sentry, and comes with lessons learned from production incidents. |
 | [architecture-upgrade](skills/architecture-upgrade/SKILL.md) | Audits an existing app (read only), writes a plain-language architecture page and an evidence-backed gap report, plans fixes in phases within the current stack (beta before prod, API-first, core logic out of n8n, single-server risk), then fixes them with a test-gated loop. Install together with loop-engineering. |
 
+New to this? Read **[GETTING-STARTED.md](GETTING-STARTED.md)**: point Claude at your project, get a plain-language check-up, then upgrade it step by step.
+
 ## Quick start: fix an existing app
 
 1. Install both **loop-engineering** and **architecture-upgrade** (steps below).
